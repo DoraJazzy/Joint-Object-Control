@@ -1,41 +1,121 @@
 participant_id,mode,iteration,phase,reaction_time_s,distance_px
-1,individual,1,approach,2.4625,315.0
-1,individual,1,homing_in,2.9308,140.0
-1,individual,2,approach,0.9575,165.0
-1,individual,2,homing_in,6.2151,415.0
-1,individual,3,approach,2.8849,380.0
-1,individual,3,homing_in,2.7254,110.0
-1,individual,4,approach,3.4205,525.0
-1,individual,4,homing_in,4.5232,225.0
-1,individual,5,approach,0.9199,85.0
-1,individual,5,homing_in,1.1491,55.0
-1,individual,6,approach,2.0412,315.0
-1,individual,6,homing_in,1.1521,55.0
-1,individual,7,approach,2.1463,405.0
-1,individual,7,homing_in,1.9162,75.0
-1,individual,8,approach,1.1806,265.0
-1,individual,8,homing_in,2.9396,135.0
-1,individual,9,approach,1.9412,395.0
-1,individual,9,homing_in,4.7499,215.0
-1,individual,10,approach,1.9069,385.0
-1,individual,10,homing_in,6.2951,235.0
-1,individual,11,approach,1.5515,215.0
-1,individual,11,homing_in,19.104,1705.0
-1,individual,12,approach,2.8352,520.0
-1,individual,12,homing_in,2.3147,85.0
-1,individual,13,approach,1.6445,295.0
-1,individual,13,homing_in,1.532,65.0
-1,individual,14,approach,1.2246,200.0
-1,individual,14,homing_in,1.7464,65.0
-1,individual,15,approach,1.2235,265.0
-1,individual,15,homing_in,7.2371,225.0
-1,individual,16,approach,1.4345,245.0
-1,individual,16,homing_in,7.637,470.0
-1,individual,17,approach,1.9719,195.0
-1,individual,17,homing_in,5.6483,375.0
-1,individual,18,approach,0.8809,165.0
-1,individual,18,homing_in,3.8754,145.0
-1,individual,19,approach,1.0015,185.0
-1,individual,19,homing_in,1.7767,75.0
-1,individual,20,approach,2.3327,315.0
-1,individual,20,homing_in,1.8473,75.0
+ 1,individual,1,approach,1.8837,310.0
+ 1,individual,1,homing_in,5.5909,205.0
+ 1,individual,2,approach,2.419,205.0
+ 1,individual,2,homing_in,1.4121,55.0
+ 1,individual,3,approach,1.9944,295.0
+ 1,individual,3,homing_in,6.0343,225.0
+ 1,individual,4,approach,1.1941,205.0
+ 1,individual,4,homing_in,1.7095,65.0
+ 1,individual,5,approach,1.1512,265.0
+ 1,individual,5,homing_in,2.8941,95.0
+ 1,individual,6,approach,2.5709,240.0
+ 1,individual,6,homing_in,1.4491,70.0
+ 1,individual,7,approach,2.5079,415.0
+ 1,individual,7,homing_in,1.1594,55.0
+ 1,individual,8,approach,2.2386,380.0
+ 1,individual,8,homing_in,1.851,70.0
+ 1,individual,9,approach,1.2654,265.0
+ 1,individual,9,homing_in,1.8302,75.0
+ 1,individual,10,approach,2.2053,325.0
+ 1,individual,10,homing_in,1.1448,55.0
+ 1,individual,11,approach,1.9185,385.0
+ 1,individual,11,homing_in,1.6848,60.0
+ 1,individual,12,approach,2.19,395.0
+ 1,individual,12,homing_in,1.1483,55.0
+ 1,individual,13,approach,0.8346,85.0
+ 1,individual,13,homing_in,1.4285,65.0
+ 1,individual,14,approach,0.8499,165.0
+ 1,individual,14,homing_in,3.7711,115.0
+ 1,individual,15,approach,2.2852,505.0
+ 1,individual,15,homing_in,1.6514,65.0
+ 1,individual,16,approach,0.9161,165.0
+ 1,individual,16,homing_in,4.3798,175.0
+ 1,individual,17,approach,1.5392,285.0
+ 1,individual,17,homing_in,6.5385,475.0
+ 1,individual,18,approach,1.0313,185.0
+ 1,individual,18,homing_in,2.5176,85.0
+ 1,individual,19,approach,1.5358,245.0
+ 1,individual,19,homing_in,3.5284,135.0
+ 1,individual,20,approach,1.7886,280.0
+ 1,individual,20,homing_in,1.8922,60.0
+ 1,playback,1,approach,2.1629,310.0
+ 1,playback,1,homing_in,3.6674,110.0
+ 1,playback,2,approach,4.5219,205.0
+ 1,playback,2,homing_in,1.1634,55.0
+ 1,playback,3,approach,3.2453,306.21
+ 1,playback,3,homing_in,4.9635,105.0
+ 1,playback,4,approach,1.3021,185.0
+ 1,playback,4,homing_in,12.3798,565.0
+ 1,playback,5,approach,5.6992,305.0
+ 1,playback,5,homing_in,2.0338,95.0
+ 1,playback,6,approach,5.6765,255.0
+ 1,playback,6,homing_in,2.0181,65.0
+ 1,playback,7,approach,5.7449,395.0
+ 1,playback,7,homing_in,3.206,95.0
+ 1,playback,8,approach,6.159,395.0
+ 1,playback,8,homing_in,7.2776,355.0
+ 1,playback,9,approach,5.0248,285.0
+ 1,playback,9,homing_in,1.1495,55.0
+ 1,playback,10,approach,2.2285,285.0
+ 1,playback,10,homing_in,2.5979,55.0
+ 1,playback,11,approach,5.0465,385.0
+ 1,playback,11,homing_in,1.1497,60.0
+ 1,playback,12,approach,4.4012,385.0
+ 1,playback,12,homing_in,1.4278,65.0
+ 1,playback,13,approach,0.8396,85.0
+ 1,playback,13,homing_in,1.4361,65.0
+ 1,playback,14,approach,4.442,195.0
+ 1,playback,14,homing_in,2.9066,115.0
+ 1,playback,15,approach,2.7312,505.0
+ 1,playback,15,homing_in,1.1567,55.0
+ 1,playback,16,approach,0.932,165.0
+ 1,playback,16,homing_in,6.2777,185.0
+ 1,playback,17,approach,4.7948,365.0
+ 1,playback,17,homing_in,4.5013,132.07
+ 1,playback,18,approach,4.5181,205.0
+ 1,playback,18,homing_in,1.3853,65.0
+ 1,playback,19,approach,5.3447,275.0
+ 1,playback,19,homing_in,1.1547,60.0
+ 1,playback,20,approach,7.0832,285.0
+ 1,playback,20,homing_in,1.8421,85.0
+ 1,ai,1,approach,2.3193,283.96
+ 1,ai,1,homing_in,3.611,195.43
+ 1,ai,2,approach,2.3014,204.25
+ 1,ai,2,homing_in,10.1124,990.51
+ 1,ai,3,approach,0.9907,255.36
+ 1,ai,3,homing_in,2.8185,82.61
+ 1,ai,4,approach,0.871,179.01
+ 1,ai,4,homing_in,3.6434,121.95
+ 1,ai,5,approach,2.4978,284.78
+ 1,ai,5,homing_in,2.3049,85.28
+ 1,ai,6,approach,6.4696,642.29
+ 1,ai,6,homing_in,1.5993,55.0
+ 1,ai,7,approach,3.4863,208.14
+ 1,ai,7,homing_in,2.9844,135.02
+ 1,ai,8,approach,0.4104,83.19
+ 1,ai,8,homing_in,2.1355,58.8
+ 1,ai,9,approach,2.5696,311.82
+ 1,ai,9,homing_in,2.3987,85.44
+ 1,ai,10,approach,3.4965,389.87
+ 1,ai,10,homing_in,2.622,105.09
+ 1,ai,11,approach,3.1856,380.55
+ 1,ai,11,homing_in,1.1546,55.15
+ 1,ai,12,approach,2.5931,429.03
+ 1,ai,12,homing_in,4.3839,295.46
+ 1,ai,13,approach,1.4725,182.61
+ 1,ai,13,homing_in,8.9829,776.25
+ 1,ai,14,approach,2.8042,378.17
+ 1,ai,14,homing_in,1.1506,55.4
+ 1,ai,15,approach,2.3636,282.35
+ 1,ai,15,homing_in,4.1575,285.6
+ 1,ai,16,approach,1.0096,255.36
+ 1,ai,16,homing_in,3.2379,111.76
+ 1,ai,17,approach,2.0331,233.13
+ 1,ai,17,homing_in,4.4753,215.87
+ 1,ai,18,approach,1.955,278.94
+ 1,ai,18,homing_in,10.0062,754.34
+ 1,ai,19,approach,2.1799,187.02
+ 1,ai,19,homing_in,1.7455,75.26
+ 1,ai,20,approach,1.8605,181.2
+ 1,ai,20,homing_in,1.6383,86.43
