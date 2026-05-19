@@ -84,8 +84,6 @@ class ExperimentGame:
         self.participant_ids = participant_ids or []
 
         # --- DYAD ID ---
-        # Generated from both participant IDs in cooperative mode;
-        # None (written as empty string) for all other conditions.
         if mode == COOPERATIVE and len(self.participant_ids) == 2:
             self.dyad_id = f"{self.participant_ids[0]}_{self.participant_ids[1]}"
         else:
@@ -208,7 +206,7 @@ class ExperimentGame:
             "participant_id", "mode", "iteration", "target_angle", "phase", "timestamp",
             "cursor_x", "cursor_y", "h_vx", "h_vy", "p_vx", "p_vy",
             "target_x", "target_y", "ai_axis", "playback_axis",
-            "dyad_id",   # <-- new
+            "dyad_id",
         ]
         write_header = not os.path.exists(FILE_NAME)
         with open(FILE_NAME, "a", newline="") as f:
@@ -234,7 +232,7 @@ class ExperimentGame:
         summary_keys = [
             "participant_id", "consent", "mode", "iteration", "target_angle",
             "phase", "reaction_time_s", "distance_px",
-            "dyad_id",   # <-- new
+            "dyad_id",
         ]
         write_header = not os.path.exists(SUMMARY_FILE)
         with open(SUMMARY_FILE, "a", newline="") as f:
@@ -244,11 +242,11 @@ class ExperimentGame:
             w.writerow([pid, "yes", self.mode, self.iteration,
                         self.target_angle, "approach",
                         approach_rt, self._path_distance(approach_xy),
-                        dyad_out])   # <-- new
+                        dyad_out])
             w.writerow([pid, "yes", self.mode, self.iteration,
                         self.target_angle, "homing_in",
                         homing_rt, self._path_distance(homing_xy),
-                        dyad_out])   # <-- new
+                        dyad_out])
         print(f"Phase summary saved to {SUMMARY_FILE}")
 
     # ------------------------------------------------------------------
@@ -610,7 +608,7 @@ def show_recording_menu(screen, clock):
     if not recordings:
         screen.fill(WHITE)
         screen.blit(small_font.render(
-            "No recordings found. Run INDIVIDUAL or COOPERATIVE mode first.", True, BLACK),
+            "No recordings found. Run INDIVIDUAL mode first.", True, BLACK),
             (SCREEN_WIDTH // 2 - 350, SCREEN_HEIGHT // 2))
         pygame.display.flip()
         pygame.time.wait(2000)
@@ -795,29 +793,24 @@ if __name__ == "__main__":
                 user_cancelled = True
                 break
 
-            record = {
-                'iteration':   iteration,
-                'target_pos':  game.target_pos,
-                'target_angle': game.target_angle,
-                'horizontal':  [entry[8]  for entry in game.data_log],  # h_vx
-                'vertical':    [entry[9]  for entry in game.data_log],  # h_vy
-            }
-            if mode == COOPERATIVE:
-                record['human_horizontal']   = [entry[8]  for entry in game.data_log]  # h_vx
-                record['human_vertical']     = [entry[9]  for entry in game.data_log]  # h_vy
-                record['partner_horizontal'] = [entry[10] for entry in game.data_log]  # p_vx
-                record['partner_vertical']   = [entry[11] for entry in game.data_log]  # p_vy
+            # Only save recordings for individual mode — these are the source for playback.
+            # Cooperative mode does not produce recordings.
+            if mode == INDIVIDUAL:
+                record = {
+                    'iteration':    iteration,
+                    'target_pos':   game.target_pos,
+                    'target_angle': game.target_angle,
+                    'horizontal':   [entry[8] for entry in game.data_log],  # h_vx
+                    'vertical':     [entry[9] for entry in game.data_log],  # h_vy
+                }
+                session_records.append(record)
 
-            session_records.append(record)
-
-            if mode == INDIVIDUAL and individual_save_path:
-                save_session_recording(mode, session_records, individual_save_path)
+                if individual_save_path:
+                    save_session_recording(mode, session_records, individual_save_path)
 
         if not user_cancelled:
-            if mode == COOPERATIVE and session_records:
-                path = save_session_recording(mode, session_records)
-                print(f"Cooperative session saved: {path}")
-
+            # Cooperative mode no longer saves a recording —
+            # only individual recordings are used as playback sources.
             print(f"\nCompleted all {num_iterations} iterations of {mode.upper()} mode!")
             print("Returning to menu...")
 
