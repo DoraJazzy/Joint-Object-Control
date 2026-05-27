@@ -1,21 +1,23 @@
 ---
 title: "Soccult"
-output: html_document
 date: "2026-05-18"
+authors: Noémi Svot, Dóra Jázmin Szájer
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
 ---
 
-```{r}
-# Set working directory
+```{r setup, echo=FALSE}
+# setwd("~/Documents/Experiment")
+# getwd()
 
-setwd("~/Documents/Experiment")
-getwd()
-
-# Install packages
+#load packages
 library(tidyverse)
 ```
 
 ```{r}
-# Load datasets
+#load datasets
 summary_data <- read_csv("experiment_summary.csv")
 frame_data <- read_csv("experiment_data.csv")
 
@@ -37,6 +39,12 @@ summary_clean <- summary_data %>%
   filter(mode != "practice")
 
 table(summary_clean$mode)
+```
+```{r}
+#remove noemi
+summary_clean <- summary_data %>%
+  filter(!(participant_id == "noemi" & mode == "individual")) %>%
+  filter(!(dyad_id == "jens_noemi" & mode == "cooperative"))
 ```
 
 ```{r}
@@ -241,9 +249,8 @@ analysis_data <- trial_data %>%
 
 # Check
 table(analysis_data$error_trial)
-
-# Error trials were excluded from the primary RT and DIST analyses. In the current sample, no trials met the error-trial criteria, therefore all trials were retained for analysis.
 ```
+Error-trial criteria: "Two types of behavior were classified as errors: If the cursor moved into the homing-in zone but then excited it again, and if the cursor moved outside of the screen borders." (Wahn at al., 2016)
 
 ```{r}
 # 14. Create averaged participant-level dataset
@@ -376,13 +383,26 @@ cooperative_RT <- analysis_data %>%
   )
 
 # Best individual within each dyad
+#dyad mapping
+participant_dyad_map <- tibble::tribble(
+  ~participant_id, ~dyad_id,
+   "666",         "666_����",
+   "����",      "666_����",
+   "august",      "august_jens",
+   "jens",        "august_jens",
+   "jakob",       "jakob_niels",
+   "niels",       "jakob_niels",
+   "odin",        "odin_line",
+   "line",        "odin_line",
+   "valeria",     "valeria_emil",
+   "emil",        "valeria_emil",
+   "lasse",       "mads_lasse",
+   "mads",        "mads_lasse"
+  
+)
+
 best_individual_RT <- individual_RT %>%
-  mutate(
-    dyad_id = case_when(
-      participant_id %in% c("jens", "noemi") ~ "jens_noemi",
-      TRUE ~ NA_character_
-    )
-  ) %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
   group_by(dyad_id, phase, contribution_angle) %>%
   summarise(
     best_individual_RT = min(individual_RT, na.rm = TRUE),
@@ -402,31 +422,596 @@ collective_benefit_RT <- cooperative_RT %>%
 # Check
 glimpse(collective_benefit_RT)
 ```
+```{r}
+#Collective benefit DIST
+
+individual_DIST <- analysis_data %>%
+  filter(condition == "individual") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(
+    individual_DIST = mean(DIST, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+cooperative_DIST <- analysis_data %>%
+  filter(condition == "cooperative") %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(
+    cooperative_DIST = mean(DIST, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#Best (lowest) individual DIST within each dyad
+best_individual_DIST <- individual_DIST %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(
+    best_individual_DIST = min(individual_DIST, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#collective benefit (DIST)
+collective_benefit_DIST <- cooperative_DIST %>%
+  left_join(
+    best_individual_DIST,
+    by = c("dyad_id", "phase", "contribution_angle")
+  ) %>%
+  mutate(
+    collective_benefit = best_individual_DIST / cooperative_DIST
+  )
+
+#check
+glimpse(collective_benefit_DIST)
+
+
+```
+Collective benefit interpretation: "Values above 1 indicate a collective benefit because dyad RT is lower than the faster member's RT. This measure was calculated separately for Approach and Homing-in phase - averaged across all contribution angles as well as separately for each of the three contribution angles (30%, 50%, 70%)"
+- 0° and 90°: only one dyad member controls controls the cursor as only horizontal or vertical is required
+- 45°: both members contributed equally - 50%
+- 22.5° and 67.5°: one of the members contributed more than the other: 30% vs 70%
 
 ```{r}
 # 19. Calculate skill ratio (RT)
 skill_ratio_RT <- individual_RT %>%
-  mutate(
-    dyad_id = case_when(
-      participant_id %in% c("jens", "noemi") ~ "jens_noemi",
-      TRUE ~ NA_character_
-    )
-  ) %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
   group_by(dyad_id, phase, contribution_angle) %>%
   summarise(
     faster_partner = min(individual_RT, na.rm = TRUE),
     slower_partner = max(individual_RT, na.rm = TRUE),
-    
-    skill_ratio = faster_partner / slower_partner,
-    
+    skill_ratio    = faster_partner / slower_partner,
     .groups = "drop"
   )
-
 # Check
 glimpse(skill_ratio_RT)
 ```
 
+```{r}
+#Skill ratio DIST
+skill_ratio_DIST <- individual_DIST %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(
+    faster_partner = min(individual_DIST, na.rm = TRUE),
+    slower_partner = max(individual_DIST, na.rm = TRUE),
+    skill_ratio    = faster_partner / slower_partner,
+    .groups = "drop"
+  )
+# Check
+glimpse(skill_ratio_DIST)
+```
+Skill ratio interpretation: A value of 1 indicates that both members perform equally well individually, whereas an increasingly lower ratio indicates a larger interindividual performance difference.
 
+```{r}
+#correlating interindivual RT skill ratios with collective benefit for each of the contribution conditions, separately for Approach and Homing-in
 
+#join the two into one data frame
+corr_data <- collective_benefit_RT %>%
+  left_join(skill_ratio_RT, by = c("dyad_id", "phase", "contribution_angle"))
 
+#Pearson r between skill_ratio and collective benefit
+correlation_results <- corr_data %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n = sum(!is.na(skill_ratio) & !is.na(collective_benefit)),
+    r = cor(skill_ratio, collective_benefit, use = "complete.obs"),
+    p_value = tryCatch(
+      cor.test(skill_ratio, collective_benefit)$p.value,
+      error = function(e) NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+print(correlation_results)
 
+#plot
+library(ggplot2)
+
+ggplot(corr_data, aes(x = skill_ratio, y = collective_benefit)) +
+  geom_point(size = 2.5, alpha = 0.75, aes(colour = phase)) +
+  geom_smooth(method = "lm", se = TRUE, colour = "grey30", linewidth = 0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey60") +
+  facet_grid(phase ~ contribution_angle,
+             labeller = labeller(
+               contribution_angle = function(x) paste0(x, "°")
+             )) +
+  scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  labs(
+    title    = "Skill ratio RT vs. collective benefit RT",
+    subtitle = "Rows = phase  |  Columns = contribution angle",
+    x        = "Skill ratio (best RT / worst RT)",
+    y        = "Collective benefit (best individual RT / cooperative RT)",
+    colour   = "Phase"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+```{r}
+#correlating interindivual DIST skill ratios with collective benefit for each of the contribution conditions, separately for Approach and Homing-in
+
+#join the two into one data frame
+corr_data2 <- collective_benefit_DIST %>%
+  left_join(skill_ratio_DIST, by = c("dyad_id", "phase", "contribution_angle"))
+
+#Pearson r between skill_ratio and collective benefit
+correlation_results2 <- corr_data2 %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n = sum(!is.na(skill_ratio) & !is.na(collective_benefit)),
+    r = cor(skill_ratio, collective_benefit, use = "complete.obs"),
+    p_value = tryCatch(
+      cor.test(skill_ratio, collective_benefit)$p.value,
+      error = function(e) NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+print(correlation_results2)
+
+#plot
+library(ggplot2)
+
+ggplot(corr_data2, aes(x = skill_ratio, y = collective_benefit)) +
+  geom_point(size = 2.5, alpha = 0.75, aes(colour = phase)) +
+  geom_smooth(method = "lm", se = TRUE, colour = "grey30", linewidth = 0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey60") +
+  facet_grid(phase ~ contribution_angle,
+             labeller = labeller(
+               contribution_angle = function(x) paste0(x, "°")
+             )) +
+  scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  labs(
+    title    = "Skill ratio DIST vs. collective benefit DIST",
+    subtitle = "Rows = phase  |  Columns = contribution angle",
+    x        = "Skill ratio (best DIST / worst DIST)",
+    y        = "Collective benefit (best individual DIST / cooperative DIST)",
+    colour   = "Phase"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+Interpretation: Wahn et al. predicted that the collective benefit systematically increases with larger skill ratios, suggesting that dyad members who have increasingly similar individual performance levels benefit more from performing jointly - particularly when both members contribute equally to the joint performance. If however the better individual's dominance compensates for a larger interindividual difference (as in the 70% contribution condition (22.5° and 67.5°)), they predicted a reduced correlation relative to the other contribution conditions.
+- With only 6 dyads, we have very low power per angle x phase cell, so we have to trat the correlations as descriptive/exploratory and flag that in the write-up (we could collapse across angles and just group by phase for more statistical power, but I don't think we should)
+
+```{r}
+#Checking for social facilitation
+#Comparing RT in the individual and joint condition for the baseline angles 0° and 90°
+#done separately for Approach and Homing-in
+
+library(effectsize)
+
+#filter to baseline angles
+temp_sf <- analysis_data %>%
+  filter(contribution_angle %in% c(0, 90),
+         condition %in% c("individual", "cooperative")) %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+social_fac_data <- temp_sf %>%
+  group_by(participant_id, dyad_id, phase, contribution_angle, condition) %>%
+  summarise(
+    mean_RT = mean(RT, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#summary table
+social_fac_summary <- social_fac_data %>%
+  group_by(phase, contribution_angle, condition) %>%
+  summarise(
+    n     = n(),
+    M_RT  = mean(mean_RT, na.rm = TRUE),
+    SE_RT = sd(mean_RT, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+print(social_fac_summary)
+
+#paired t-tests + Wilcoxon + Cohen's d per phase x angle
+
+#individual: average both members per dyad
+temp_ind <- social_fac_data %>%
+  filter(condition == "individual") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+individual_sf <- temp_ind %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(ind_RT = mean(mean_RT, na.rm = TRUE), .groups = "drop")
+
+#cooperative
+cooperative_sf <- social_fac_data %>%
+  filter(condition == "cooperative") %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(coop_RT = mean(mean_RT, na.rm = TRUE), .groups = "drop")
+
+#join and run both t-test and Wilcoxon with Cohen's d
+sf_tests <- individual_sf %>%
+  left_join(cooperative_sf, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n         = n(),
+    M_ind     = mean(ind_RT,  na.rm = TRUE),
+    M_coop    = mean(coop_RT, na.rm = TRUE),
+    mean_diff = mean(coop_RT - ind_RT, na.rm = TRUE),
+    t_stat    = tryCatch(t.test(coop_RT, ind_RT, paired = TRUE)$statistic,  error = function(e) NA),
+    t_p_value = tryCatch(t.test(coop_RT, ind_RT, paired = TRUE)$p.value,    error = function(e) NA),
+    W_stat    = tryCatch(wilcox.test(coop_RT, ind_RT, paired = TRUE)$statistic, error = function(e) NA),
+    W_p_value = tryCatch(wilcox.test(coop_RT, ind_RT, paired = TRUE)$p.value,   error = function(e) NA),
+    cohens_d  = tryCatch(
+      repeated_measures_d(coop_RT, ind_RT, method = "z")$d,
+      error = function(e) NA
+    ),
+    .groups   = "drop"
+  ) %>%
+  mutate(
+    t_sig = case_when(
+      t_p_value < .001 ~ "***",
+      t_p_value < .01  ~ "**",
+      t_p_value < .05  ~ "*",
+      t_p_value < .10  ~ "†",
+      TRUE             ~ ""
+    ),
+    W_sig = case_when(
+      W_p_value < .001 ~ "***",
+      W_p_value < .01  ~ "**",
+      W_p_value < .05  ~ "*",
+      W_p_value < .10  ~ "†",
+      TRUE             ~ ""
+    )
+  )
+print(sf_tests)
+
+#plot
+temp_plot <- social_fac_data %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+temp_plot %>%
+  group_by(dyad_id, phase, contribution_angle, condition) %>%
+  summarise(mean_RT = mean(mean_RT, na.rm = TRUE), .groups = "drop") %>%
+  mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                     levels = c("0°", "90°"))) %>%
+  ggplot(aes(x = condition, y = mean_RT, colour = condition, group = dyad_id)) +
+  geom_line(alpha = 0.4, colour = "grey50") +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_summary(aes(group = 1), fun = mean, geom = "line",
+               linewidth = 1.2, colour = "grey20") +
+  stat_summary(aes(group = 1), fun = mean, geom = "point",
+               size = 4, shape = 18, colour = "grey20") +
+  facet_grid(phase ~ contribution_angle) +
+  scale_colour_manual(values = c("individual"  = "#4C9BE8",
+                                 "cooperative" = "#E8834C")) +
+  scale_x_discrete(labels = c("individual"  = "Individual",
+                               "cooperative" = "Cooperative")) +
+  labs(
+    title    = "Social facilitation check",
+    subtitle = "Baseline angles only  |  Rows = phase  |  Columns = angle",
+    x        = NULL,
+    y        = "Mean RT (s)",
+    colour   = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+Interpretation:
+
+1. Approach phase: At 0°, there was no significant difference between individual and cooperative RT (W = 11, p = 1.000, d = 0.12). Similarly, at 90°, cooperative and individual RTs did not differ significantly (W = 9, p = .844, d = -0.19), with the small negative d indicating cooperative RT was marginally faster than individual.
+
+2. Homing-in phase: At 0°, no significant difference was found between conditions (W = 13, p = .688, d = 0.05). At 90°, cooperative RT (M = 5.24 s) was notably slower than individual RT (M = 2.78 s), though this difference did not reach significance (W = 17, p = .219, d = 0.53), representing a medium effect size.
+
+```{r}
+#Checking for social facilitation
+#Comparing DIST in the individual and joint condition for the baseline angles 0° and 90°
+#done separately for Approach and Homing-in
+
+library(effectsize)
+
+#filter to baseline angles
+temp_sf_dist <- analysis_data %>%
+  filter(contribution_angle %in% c(0, 90),
+         condition %in% c("individual", "cooperative")) %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+social_fac_data_dist <- temp_sf_dist %>%
+  group_by(participant_id, dyad_id, phase, contribution_angle, condition) %>%
+  summarise(
+    mean_DIST = mean(DIST, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#summary table
+social_fac_summary_dist <- social_fac_data_dist %>%
+  group_by(phase, contribution_angle, condition) %>%
+  summarise(
+    n       = n(),
+    M_DIST  = mean(mean_DIST, na.rm = TRUE),
+    SE_DIST = sd(mean_DIST, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+print(social_fac_summary_dist)
+
+#paired t-tests + Wilcoxon + Cohen's d per phase x angle
+
+#individual: average both members per dyad
+temp_ind_dist <- social_fac_data_dist %>%
+  filter(condition == "individual") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+individual_sf_dist <- temp_ind_dist %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(ind_DIST = mean(mean_DIST, na.rm = TRUE), .groups = "drop")
+
+#cooperative
+cooperative_sf_dist <- social_fac_data_dist %>%
+  filter(condition == "cooperative") %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(coop_DIST = mean(mean_DIST, na.rm = TRUE), .groups = "drop")
+
+#join and run both t-test and Wilcoxon with Cohen's d
+sf_tests_dist <- individual_sf_dist %>%
+  left_join(cooperative_sf_dist, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n         = n(),
+    M_ind     = mean(ind_DIST,  na.rm = TRUE),
+    M_coop    = mean(coop_DIST, na.rm = TRUE),
+    mean_diff = mean(coop_DIST - ind_DIST, na.rm = TRUE),
+    t_stat    = tryCatch(t.test(coop_DIST, ind_DIST, paired = TRUE)$statistic,      error = function(e) NA),
+    t_p_value = tryCatch(t.test(coop_DIST, ind_DIST, paired = TRUE)$p.value,        error = function(e) NA),
+    W_stat    = tryCatch(wilcox.test(coop_DIST, ind_DIST, paired = TRUE)$statistic, error = function(e) NA),
+    W_p_value = tryCatch(wilcox.test(coop_DIST, ind_DIST, paired = TRUE)$p.value,   error = function(e) NA),
+    cohens_d  = tryCatch(
+      repeated_measures_d(coop_DIST, ind_DIST, method = "z")$d,
+      error = function(e) NA
+    ),
+    .groups   = "drop"
+  ) %>%
+  mutate(
+    t_sig = case_when(
+      t_p_value < .001 ~ "***",
+      t_p_value < .01  ~ "**",
+      t_p_value < .05  ~ "*",
+      t_p_value < .10  ~ "†",
+      TRUE             ~ ""
+    ),
+    W_sig = case_when(
+      W_p_value < .001 ~ "***",
+      W_p_value < .01  ~ "**",
+      W_p_value < .05  ~ "*",
+      W_p_value < .10  ~ "†",
+      TRUE             ~ ""
+    )
+  )
+print(sf_tests_dist)
+
+#plot
+temp_plot_dist <- social_fac_data_dist %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  mutate(dyad_id = coalesce(dyad_id.x, dyad_id.y)) %>%
+  select(-dyad_id.x, -dyad_id.y)
+
+temp_plot_dist %>%
+  group_by(dyad_id, phase, contribution_angle, condition) %>%
+  summarise(mean_DIST = mean(mean_DIST, na.rm = TRUE), .groups = "drop") %>%
+  mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                     levels = c("0°", "90°"))) %>%
+  ggplot(aes(x = condition, y = mean_DIST, colour = condition, group = dyad_id)) +
+  geom_line(alpha = 0.4, colour = "grey50") +
+  geom_point(size = 3, alpha = 0.8) +
+  stat_summary(aes(group = 1), fun = mean, geom = "line",
+               linewidth = 1.2, colour = "grey20") +
+  stat_summary(aes(group = 1), fun = mean, geom = "point",
+               size = 4, shape = 18, colour = "grey20") +
+  facet_grid(phase ~ contribution_angle) +
+  scale_colour_manual(values = c("individual"  = "#4C9BE8",
+                                 "cooperative" = "#E8834C")) +
+  scale_x_discrete(labels = c("individual"  = "Individual",
+                               "cooperative" = "Cooperative")) +
+  labs(
+    title    = "Social facilitation check (DIST)",
+    subtitle = "Baseline angles only  |  Rows = phase  |  Columns = angle",
+    x        = NULL,
+    y        = "Mean DIST",
+    colour   = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+Interpretation:
+
+1. Approach: At 0°, dyads travelled slightly more distance cooperatively (M = 326) than individually (M = 305), a mean difference of 20.4 units, though this was non-significant (W = 11, p = .418, d = 0.42). At 90°, a similar pattern emerged — cooperative DIST (M = 330) exceeded individual DIST (M = 303) by 26.9 units, again non-significant (W = 9, p = .787, d = 0.30). Both effects are small-to-medium in size but in the direction of a coordination cost — dyads travel more than individuals.
+
+2. Homing-in: At 0°, the pattern reverses: cooperative DIST (M = 300) was actually lower than individual DIST (M = 377), a mean difference of -76.6 units (W = 9, p = .844, d = -0.25). This hints at a slight collective benefit in path efficiency, though it is non-significant and small. At 90°, the largest effect emerges — cooperative DIST (M = 448) was 238 units greater than individual DIST (M = 209), a medium effect (d = 0.48) that nonetheless failed to reach significance (W = 18, p = .156), suggesting a meaningful coordination cost at maximal asymmetry during Homing-in.
+
+```{r}
+#Determining whether joint control was beneficial
+#Is collective RT benefit larger than 1? 
+#one-sample t-tests
+
+one_sample_tests_RT <- collective_benefit_RT %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n        = sum(!is.na(collective_benefit)),
+    M_benefit = mean(collective_benefit, na.rm = TRUE),
+    SE_benefit = sd(collective_benefit, na.rm = TRUE) / sqrt(n),
+    t_stat   = tryCatch(t.test(collective_benefit, mu = 1)$statistic, error = function(e) NA),
+    p_value  = tryCatch(t.test(collective_benefit, mu = 1)$p.value,   error = function(e) NA),
+    cohens_d = tryCatch(
+      repeated_measures_d(collective_benefit, mu = 1, method = "z")$d,
+      error = function(e) (mean(collective_benefit, na.rm = TRUE) - 1) /
+                           sd(collective_benefit, na.rm = TRUE)  # fallback: manual d
+    ),
+    .groups  = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+
+print(one_sample_tests_RT)
+
+#plot
+collective_benefit_RT %>%
+  mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                     levels = c("0°", "22.5°", "45°", "67.5°", "90°"))) %>%
+  ggplot(aes(x = contribution_angle, y = collective_benefit, colour = phase)) +
+  # individual dyad points
+  geom_point(alpha = 0.6, size = 2.5,
+             position = position_dodge(width = 0.4)) +
+  # mean ± SE bars
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(width = 0.4), linewidth = 0.8) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(width = 0.4)) +
+  stat_summary(fun = mean, geom = "line", aes(group = phase),
+               position = position_dodge(width = 0.4), linewidth = 0.8) +
+  # null hypothesis line
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  # significance stars from one-sample tests
+  geom_text(data = one_sample_tests_RT,
+            aes(x = factor(paste0(contribution_angle, "°"),
+                           levels = c("0°", "22.5°", "45°", "67.5°", "90°")),
+                y = max(collective_benefit_RT$collective_benefit, na.rm = TRUE) + 0.1,
+                label = sig, colour = phase),
+            position = position_dodge(width = 0.4),
+            size = 5, show.legend = FALSE) +
+  facet_wrap(~ phase) +
+  scale_colour_manual(values = c("Approach"   = "#4C9BE8",
+                                 "Homing-in"  = "#E8834C")) +
+  labs(
+    title    = "Collective benefit (RT) vs. null hypothesis of 1",
+    subtitle = "Dashed line = no benefit  |  Stars = one-sample t-test vs. μ = 1",
+    x        = "Contribution angle",
+    y        = "Collective benefit (best individual RT / cooperative RT)",
+    colour   = "Phase"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+```{r}
+#Determining whether joint control was beneficial
+#Is collective DIST benefit larger than 1? 
+#one-sample t-tests
+
+one_sample_tests_DIST <- collective_benefit_DIST %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n          = sum(!is.na(collective_benefit)),
+    M_benefit  = mean(collective_benefit, na.rm = TRUE),
+    SE_benefit = sd(collective_benefit, na.rm = TRUE) / sqrt(n),
+    t_stat     = tryCatch(t.test(collective_benefit, mu = 1)$statistic, error = function(e) NA),
+    p_value    = tryCatch(t.test(collective_benefit, mu = 1)$p.value,   error = function(e) NA),
+    cohens_d   = tryCatch(
+      (mean(collective_benefit, na.rm = TRUE) - 1) / sd(collective_benefit, na.rm = TRUE),
+      error = function(e) NA
+    ),
+    .groups    = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+
+print(one_sample_tests_DIST)
+
+#plot
+collective_benefit_DIST %>%
+  mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                     levels = c("0°", "22.5°", "45°", "67.5°", "90°"))) %>%
+  ggplot(aes(x = contribution_angle, y = collective_benefit, colour = phase)) +
+  # individual dyad points
+  geom_point(alpha = 0.6, size = 2.5,
+             position = position_dodge(width = 0.4)) +
+  # mean ± SE bars
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(width = 0.4), linewidth = 0.8) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(width = 0.4)) +
+  stat_summary(fun = mean, geom = "line", aes(group = phase),
+               position = position_dodge(width = 0.4), linewidth = 0.8) +
+  # null hypothesis line
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  # significance stars from one-sample tests
+  geom_text(data = one_sample_tests_DIST,
+            aes(x = factor(paste0(contribution_angle, "°"),
+                           levels = c("0°", "22.5°", "45°", "67.5°", "90°")),
+                y = max(collective_benefit_DIST$collective_benefit, na.rm = TRUE) + 0.1,
+                label = sig, colour = phase),
+            position = position_dodge(width = 0.4),
+            size = 5, show.legend = FALSE) +
+  facet_wrap(~ phase) +
+  scale_colour_manual(values = c("Approach"  = "#4C9BE8",
+                                 "Homing-in" = "#E8834C")) +
+  labs(
+    title    = "Collective benefit (DIST) vs. null hypothesis of 1",
+    subtitle = "Dashed line = no benefit  |  Stars = one-sample t-test vs. μ = 1",
+    x        = "Contribution angle",
+    y        = "Collective benefit (best individual DIST / cooperative DIST)",
+    colour   = "Phase"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+```{r}
+
+```
+```{r}
+
+```
