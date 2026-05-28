@@ -1750,5 +1750,88 @@ The results of the condition-contribution analysis and the adaptiveness analysis
 - Human cooperative mode had to be taken out here because their data is grouped (it belongs to 2 people instead of just one) and therefore cannot be added to the analysis here
  
 ```{r}
+#for AI and playback: average the two dyad members per dyad as baseline
+#for cooperative: best dyad member is used as baseline
+cb_ai_dyad_RT <- analysis_data %>%
+  filter(condition == "ai") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  rename(dyad_id = dyad_id.y) %>%
+  filter(!is.na(dyad_id)) %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(part_RT = mean(RT, na.rm = TRUE), .groups = "drop") %>%
+  left_join(best_individual_RT, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  mutate(collective_benefit = best_individual_RT / part_RT,
+         partner_type = "adaptive_ai")
 
+cb_pb_dyad_RT <- analysis_data %>%
+  filter(condition == "playback") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  rename(dyad_id = dyad_id.y) %>%
+  filter(!is.na(dyad_id)) %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(part_RT = mean(RT, na.rm = TRUE), .groups = "drop") %>%
+  left_join(best_individual_RT, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  mutate(collective_benefit = best_individual_RT / part_RT,
+         partner_type = "nonadaptive_playback")
+
+cb_coop_dyad_RT <- collective_benefit_RT %>%
+  mutate(partner_type = "adaptive_human")
+
+#bind all three — now all at dyad level, n = 6 each
+cb_all_dyad_RT <- bind_rows(
+  cb_coop_dyad_RT %>% select(dyad_id, phase, contribution_angle, collective_benefit, partner_type),
+  cb_ai_dyad_RT,
+  cb_pb_dyad_RT
+) %>%
+  mutate(
+    partner_type = factor(partner_type,
+                          levels = c("adaptive_human", "adaptive_ai", "nonadaptive_playback")),
+    contribution_angle = factor(paste0(contribution_angle, "°"),
+                                levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+  )
+
+#pairwise comparisons per phase (paired by dyad)
+for (ph in levels(cb_all_dyad_RT$phase)) {
+  cat("\n── Phase:", ph, "──\n")
+  d <- cb_all_dyad_RT %>% filter(phase == ph) %>%
+    group_by(dyad_id, partner_type) %>%
+    summarise(mean_cb = mean(collective_benefit, na.rm = TRUE), .groups = "drop")
+  print(pairwise.t.test(
+    x               = d$mean_cb,
+    g               = d$partner_type,
+    paired          = TRUE,
+    p.adjust.method = "bonferroni"
+  ))
+}
+
+#plot
+ggplot(cb_all_dyad_RT,
+       aes(x = contribution_angle, y = collective_benefit, colour = partner_type)) +
+  geom_jitter(alpha = 0.5, size = 2,
+              position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.5)) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.5)) +
+  stat_summary(fun = mean, geom = "line", aes(group = partner_type),
+               position = position_dodge(0.5), linewidth = 0.8) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(0.5), linewidth = 0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ phase) +
+  scale_colour_manual(
+    values = c("adaptive_human"       = "#E8834C",
+               "adaptive_ai"          = "#9B59B6",
+               "nonadaptive_playback" = "#27AE60"),
+    labels = c("Adaptive Human", "Adaptive AI", "Non-adaptive Playback")
+  ) +
+  labs(
+    title    = "Collective benefit (RT) by partner type",
+    subtitle = "Dyad-level comparison, n = 6  |  Dashed line = no benefit over individual",
+    x = "Contribution angle", y = "Collective benefit (individual / condition RT)",
+    colour = "Partner type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
 ```
+Now all three conditions are at dyad level with the same n = 6, so the paired t-tests are valid — each dyad contributes one observation per condition. Flag in the write-up that the cooperative collective benefit uses the better of the two members as the individual baseline, while AI and playback average across both members, which is a slight asymmetry.
+
+We use the best individual performance of the two dyad members as the baseline for all three conditions, we accept the small asymmetry in the write-up, and note that a human-contribution-only reconstruction would require frame-level simulation beyond the scope of the current analysis.
