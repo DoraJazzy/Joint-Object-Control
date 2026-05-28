@@ -1300,6 +1300,455 @@ p_approach_DIST + p_homingin_DIST +
 ```
 #AI and PLAYBACK analysis
 
+```{r setup-ai, echo=FALSE}
+library(tidyverse)
+library(ez)
+library(effectsize)
+library(emmeans)
+library(patchwork)
+```
+
+```{r}
+#Performance relative to individual baseline (RT and DIST)
+ind_means_RT <- analysis_data %>%
+  filter(condition == "individual") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(ind_RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+ai_means_RT <- analysis_data %>%
+  filter(condition == "ai") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(ai_RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+pb_means_RT <- analysis_data %>%
+  filter(condition == "playback") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(pb_RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+# Ratio: individual / condition (>1 means condition is better) 
+ratio_ai_RT <- ind_means_RT %>%
+  inner_join(ai_means_RT, by = c("participant_id", "phase", "contribution_angle")) %>%
+  mutate(ratio = ind_RT / ai_RT)
+
+ratio_pb_RT <- ind_means_RT %>%
+  inner_join(pb_means_RT, by = c("participant_id", "phase", "contribution_angle")) %>%
+  mutate(ratio = ind_RT / pb_RT)
+
+#one-sample t-test: is ratio different from 1?
+run_ratio_tests <- function(df, ratio_col = "ratio", label) {
+  df %>%
+    group_by(phase, contribution_angle) %>%
+    summarise(
+      condition  = label,
+      n          = sum(!is.na(.data[[ratio_col]])),
+      M_ratio    = mean(.data[[ratio_col]], na.rm = TRUE),
+      SE_ratio   = sd(.data[[ratio_col]], na.rm = TRUE) / sqrt(n),
+      t_stat     = tryCatch(t.test(.data[[ratio_col]], mu = 1)$statistic, error = function(e) NA),
+      p_value    = tryCatch(t.test(.data[[ratio_col]], mu = 1)$p.value,   error = function(e) NA),
+      cohens_d   = tryCatch(
+        (mean(.data[[ratio_col]], na.rm = TRUE) - 1) / sd(.data[[ratio_col]], na.rm = TRUE),
+        error = function(e) NA
+      ),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      sig = case_when(
+        p_value < .001 ~ "***",
+        p_value < .01  ~ "**",
+        p_value < .05  ~ "*",
+        p_value < .10  ~ "†",
+        TRUE           ~ ""
+      )
+    )
+}
+
+ratio_tests_ai_RT <- run_ratio_tests(ratio_ai_RT, label = "AI")
+ratio_tests_pb_RT <- run_ratio_tests(ratio_pb_RT, label = "Playback")
+
+cat("── AI vs Individual (RT) ──\n")
+print(ratio_tests_ai_RT)
+cat("\n── Playback vs Individual (RT) ──\n")
+print(ratio_tests_pb_RT)
+
+#plot
+bind_rows(
+  ratio_ai_RT %>% mutate(condition = "AI"),
+  ratio_pb_RT %>% mutate(condition = "Playback")
+) %>%
+  mutate(
+    contribution_angle = factor(paste0(contribution_angle, "°"),
+                                levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+  ) %>%
+  ggplot(aes(x = contribution_angle, y = ratio, colour = condition)) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(0.5), linewidth = 0.8) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.5)) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ phase) +
+  scale_colour_manual(values = c("AI" = "#9B59B6", "Playback" = "#27AE60")) +
+  labs(
+    title    = "RT ratio (Individual / Condition) by contribution angle",
+    subtitle = "Dashed line = no difference from individual  |  >1 = condition faster",
+    x = "Contribution angle", y = "RT ratio", colour = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+
+```{r}
+#Performance relative to individual baseline (RT and DIST)
+#same as above just for DIST 
+ind_means_DIST <- analysis_data %>%
+  filter(condition == "individual") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(ind_DIST = mean(DIST, na.rm = TRUE), .groups = "drop")
+
+ai_means_DIST <- analysis_data %>%
+  filter(condition == "ai") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(ai_DIST = mean(DIST, na.rm = TRUE), .groups = "drop")
+
+pb_means_DIST <- analysis_data %>%
+  filter(condition == "playback") %>%
+  group_by(participant_id, phase, contribution_angle) %>%
+  summarise(pb_DIST = mean(DIST, na.rm = TRUE), .groups = "drop")
+
+ratio_ai_DIST <- ind_means_DIST %>%
+  inner_join(ai_means_DIST, by = c("participant_id", "phase", "contribution_angle")) %>%
+  mutate(ratio = ind_DIST / ai_DIST)
+
+ratio_pb_DIST <- ind_means_DIST %>%
+  inner_join(pb_means_DIST, by = c("participant_id", "phase", "contribution_angle")) %>%
+  mutate(ratio = ind_DIST / pb_DIST)
+
+ratio_tests_ai_DIST <- run_ratio_tests(ratio_ai_DIST, label = "AI")
+ratio_tests_pb_DIST <- run_ratio_tests(ratio_pb_DIST, label = "Playback")
+
+cat("── AI vs Individual (DIST) ──\n")
+print(ratio_tests_ai_DIST)
+cat("\n── Playback vs Individual (DIST) ──\n")
+print(ratio_tests_pb_DIST)
+
+bind_rows(
+  ratio_ai_DIST %>% mutate(condition = "AI"),
+  ratio_pb_DIST %>% mutate(condition = "Playback")
+) %>%
+  mutate(
+    contribution_angle = factor(paste0(contribution_angle, "°"),
+                                levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+  ) %>%
+  ggplot(aes(x = contribution_angle, y = ratio, colour = condition)) +
+  geom_jitter(width = 0.15, alpha = 0.5, size = 2) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(0.5), linewidth = 0.8) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.5)) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ phase) +
+  scale_colour_manual(values = c("AI" = "#9B59B6", "Playback" = "#27AE60")) +
+  labs(
+    title    = "DIST ratio (Individual / Condition) by contribution angle",
+    subtitle = "Dashed line = no difference from individual  |  >1 = condition shorter",
+    x = "Contribution angle", y = "DIST ratio", colour = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+```{r}
+#Condition x phase ANOVA RT
+
+library(afex)
+
+#participant level dataset collapse over contribution angles
+cond_phase_RT <- analysis_data %>%
+  filter(condition %in% c("individual", "ai", "playback")) %>%
+  group_by(participant_id, condition, phase) %>%
+  summarise(mean_RT = mean(RT, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    condition = factor(condition, levels = c("individual", "ai", "playback")),
+    phase     = factor(phase)
+  )
+
+#mixed ANOVA
+aov_cond_phase_RT <- aov_ez(
+  id      = "participant_id",
+  dv      = "mean_RT",
+  data    = cond_phase_RT,
+  within = c("condition", "phase"),
+  type    = 3
+)
+cat("── Condition × Phase ANOVA (RT) ──\n")
+print(summary(aov_cond_phase_RT))
+effectsize::eta_squared(aov_cond_phase_RT, partial = TRUE)
+
+#post-hoc: pairwise condition comparisons within each phase
+for (ph in levels(cond_phase_RT$phase)) {
+  cat("\n── Phase:", ph, "──\n")
+  d <- cond_phase_RT %>% filter(phase == ph)
+  print(pairwise.t.test(
+    x               = d$mean_RT,
+    g               = d$condition,
+    paired          = TRUE,
+    p.adjust.method = "bonferroni"
+  ))
+}
+
+#plot
+cond_phase_RT %>%
+  ggplot(aes(x = phase, y = mean_RT, colour = condition, group = condition)) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.3)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1,
+               position = position_dodge(0.3)) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15,
+               position = position_dodge(0.3), linewidth = 0.8) +
+  scale_colour_manual(
+    values = c("individual" = "#4C9BE8", "ai" = "#9B59B6", "playback" = "#27AE60"),
+    labels = c("Individual", "AI", "Playback")
+  ) +
+  labs(
+    title  = "Mean RT by Condition × Phase",
+    x = "Phase", y = "Mean RT (s)", colour = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#Condition x phase ANOVA DIST
+cond_phase_DIST <- analysis_data %>%
+  filter(condition %in% c("individual", "ai", "playback")) %>%
+  group_by(participant_id, condition, phase) %>%
+  summarise(mean_DIST = mean(DIST, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    condition = factor(condition, levels = c("individual", "ai", "playback")),
+    phase     = factor(phase)
+  )
+
+aov_cond_phase_DIST <- aov_car(
+  mean_DIST ~ condition * phase + Error(participant_id / (condition * phase)),
+  data = cond_phase_DIST
+)
+print(summary(aov_cond_phase_DIST))
+effectsize::eta_squared(aov_cond_phase_DIST, partial = TRUE)
+
+for (ph in levels(cond_phase_DIST$phase)) {
+  cat("\n── Phase:", ph, "──\n")
+  d <- cond_phase_DIST %>% filter(phase == ph)
+  print(pairwise.t.test(
+    x = d$mean_DIST,
+    g = d$condition,
+    paired = TRUE,
+    p.adjust.method = "bonferroni"
+  ))
+}
+
+cond_phase_DIST %>%
+  ggplot(aes(x = phase, y = mean_DIST, colour = condition, group = condition)) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.3)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1,
+               position = position_dodge(0.3)) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15,
+               position = position_dodge(0.3), linewidth = 0.8) +
+  scale_colour_manual(
+    values = c("individual" = "#4C9BE8", "ai" = "#9B59B6", "playback" = "#27AE60"),
+    labels = c("Individual", "AI", "Playback")
+  ) +
+  labs(
+    title  = "Mean DIST by Condition × Phase",
+    x = "Phase", y = "Mean DIST (px)", colour = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+```{r}
+#Condition-contribution analysis (phase x contribution angle ANOVAs)
+run_contribution_anova <- function(cond_label, dv_col, dv_name) {
+  
+  d <- analysis_data %>%
+    filter(condition == cond_label,
+           contribution_angle %in% c(0, 22.5, 45, 67.5, 90)) %>%
+    group_by(participant_id, phase, contribution_angle) %>%
+    summarise(dv = mean(.data[[dv_col]], na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      phase              = factor(phase),
+      contribution_angle = factor(contribution_angle)
+    )
+  
+  cat("\n══════", cond_label, "—", dv_name, "Phase × Contribution Angle ANOVA ══════\n")
+  
+  anova_out <- ezANOVA(
+    data       = d,
+    dv         = dv,
+    wid        = participant_id,
+    within     = .(phase, contribution_angle),
+    type       = 3,
+    detailed   = TRUE,
+    return_aov = TRUE
+  )
+  print(anova_out)
+  print(effectsize::eta_squared(anova_out$aov, partial = TRUE))
+  
+  #pairwise comparisons of contribution angle (collapsed over phase)
+  cat("\n── Pairwise angle comparisons (Bonferroni) ──\n")
+  pw_data <- d %>%
+    group_by(participant_id, contribution_angle) %>%
+    summarise(mean_dv = mean(dv, na.rm = TRUE), .groups = "drop")
+  
+  pw <- pairwise.t.test(
+    x               = pw_data$mean_dv,
+    g               = pw_data$contribution_angle,
+    paired          = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+  print(pw)
+  
+  #plot
+  p <- d %>%
+    mutate(
+      contribution_angle = factor(paste0(contribution_angle, "°"),
+                                  levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+    ) %>%
+    ggplot(aes(x = contribution_angle, y = dv, colour = phase, group = phase)) +
+    geom_jitter(width = 0.1, alpha = 0.4, size = 2) +
+    stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+                 position = position_dodge(0.3)) +
+    stat_summary(fun = mean, geom = "line", linewidth = 1,
+                 position = position_dodge(0.3)) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+                 position = position_dodge(0.3), linewidth = 0.8) +
+    scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+    labs(
+      title  = paste(cond_label, "–", dv_name, "by Phase × Contribution Angle"),
+      x = "Contribution angle", y = dv_name, colour = "Phase"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+  
+  print(p)
+  invisible(list(anova = anova_out, pairwise = pw))
+}
+
+#RT
+res_ai_RT  <- run_contribution_anova("ai",       "RT", "Mean RT (s)")
+res_pb_RT  <- run_contribution_anova("playback", "RT", "Mean RT (s)")
+
+#DIST
+res_ai_DIST <- run_contribution_anova("ai",       "DIST", "Mean DIST (px)")
+res_pb_DIST <- run_contribution_anova("playback", "DIST", "Mean DIST (px)")
+```
+```{r}
+#Adaptiveness analysis - adaptive ai vs non-adaptive playback (for RT)
+
+# AI vs Playback adaptiveness benefit: RT and DIST
+ai_vs_pb <- analysis_data %>%
+  filter(condition %in% c("ai", "playback")) %>%
+  group_by(participant_id, condition, phase, contribution_angle) %>%
+  summarise(
+    mean_RT   = mean(RT,   na.rm = TRUE),
+    mean_DIST = mean(DIST, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from  = condition,
+    values_from = c(mean_RT, mean_DIST)
+  ) %>%
+  mutate(
+    adaptiveness_RT   = mean_RT_playback   / mean_RT_ai,    # >1 means AI faster
+    adaptiveness_DIST = mean_DIST_playback / mean_DIST_ai   # >1 means AI shorter
+  )
+
+# One-sample t-tests vs 1 per phase × angle
+adapt_tests <- ai_vs_pb %>%
+  group_by(phase, contribution_angle) %>%
+  summarise(
+    n            = sum(!is.na(adaptiveness_RT)),
+    M_RT         = mean(adaptiveness_RT,   na.rm = TRUE),
+    SE_RT        = sd(adaptiveness_RT,     na.rm = TRUE) / sqrt(n),
+    t_RT         = tryCatch(t.test(adaptiveness_RT,   mu = 1)$statistic, error = function(e) NA),
+    p_RT         = tryCatch(t.test(adaptiveness_RT,   mu = 1)$p.value,   error = function(e) NA),
+    d_RT         = (M_RT - 1) / sd(adaptiveness_RT, na.rm = TRUE),
+    M_DIST       = mean(adaptiveness_DIST, na.rm = TRUE),
+    SE_DIST      = sd(adaptiveness_DIST,   na.rm = TRUE) / sqrt(n),
+    t_DIST       = tryCatch(t.test(adaptiveness_DIST, mu = 1)$statistic, error = function(e) NA),
+    p_DIST       = tryCatch(t.test(adaptiveness_DIST, mu = 1)$p.value,   error = function(e) NA),
+    d_DIST       = (M_DIST - 1) / sd(adaptiveness_DIST, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sig_RT   = case_when(p_RT   < .001 ~ "***", p_RT   < .01 ~ "**", p_RT   < .05 ~ "*", p_RT   < .10 ~ "†", TRUE ~ ""),
+    sig_DIST = case_when(p_DIST < .001 ~ "***", p_DIST < .01 ~ "**", p_DIST < .05 ~ "*", p_DIST < .10 ~ "†", TRUE ~ "")
+  )
+
+print(adapt_tests)
+
+# Plot 
+adapt_long <- ai_vs_pb %>%
+  pivot_longer(
+    cols      = c(adaptiveness_RT, adaptiveness_DIST),
+    names_to  = "dv",
+    values_to = "benefit"
+  ) %>%
+  mutate(
+    dv = factor(dv,
+                levels = c("adaptiveness_RT", "adaptiveness_DIST"),
+                labels = c("RT ratio", "DIST ratio")),
+    contribution_angle = factor(paste0(contribution_angle, "°"),
+                                levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+  )
+
+adapt_tests_long <- adapt_tests %>%
+  mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                     levels = c("0°", "22.5°", "45°", "67.5°", "90°"))) %>%
+  pivot_longer(
+    cols      = c(sig_RT, sig_DIST),
+    names_to  = "dv",
+    values_to = "sig"
+  ) %>%
+  mutate(
+    dv      = factor(dv,
+                     levels = c("sig_RT", "sig_DIST"),
+                     labels = c("RT ratio", "DIST ratio")),
+    y_pos   = ifelse(dv == "RT ratio",
+                     max(ai_vs_pb$adaptiveness_RT,   na.rm = TRUE) + 0.1,
+                     max(ai_vs_pb$adaptiveness_DIST, na.rm = TRUE) + 0.1)
+  )
+
+ggplot(adapt_long, aes(x = contribution_angle, y = benefit, colour = phase)) +
+  geom_jitter(alpha = 0.5, size = 2,
+              position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.4)) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.4)) +
+  stat_summary(fun = mean, geom = "line", aes(group = phase),
+               position = position_dodge(0.4), linewidth = 0.8) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(0.4), linewidth = 0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  geom_text(data = adapt_tests_long,
+            aes(x = contribution_angle, y = y_pos, label = sig, colour = phase),
+            position = position_dodge(0.4), size = 5, show.legend = FALSE) +
+  facet_grid(dv ~ phase, scales = "free_y") +
+  scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  labs(
+    title    = "Adaptiveness benefit: Playback / AI",
+    subtitle = "Dashed line = no benefit  |  >1 = AI outperforms playback",
+    x = "Contribution angle", y = "Ratio", colour = "Phase"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+Interpretation:
+The results of the condition-contribution analysis and the adaptiveness analysis look very similar but there are key differences:
+
+ - Condition-contribution analysis: For each condition (AI, playback) separately, it just takes the raw mean RT/DIST at each contribution angle and phase, runs an ANOVA to see if angle and phase affect performance, and plots those means. It describes the shape of performance across angles within each condition.
+ 
+ - Adaptiveness benefit: Takes the ratio of playback/AI at each matched angle and phase within the same participant, so it's a direct within-person measure of what the AI's adaptiveness buys you over a non-adaptive partner doing the exact same movements. Values above 1 mean the AI condition was faster/shorter than playback.
+ 
+- Human cooperative mode had to be taken out here because their data is grouped (it belongs to 2 people instead of just one) and therefore cannot be added to the analysis here
+ 
 ```{r}
 
 ```
