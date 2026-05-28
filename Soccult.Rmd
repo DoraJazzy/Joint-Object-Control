@@ -501,6 +501,8 @@ glimpse(skill_ratio_DIST)
 ```
 Skill ratio interpretation: A value of 1 indicates that both members perform equally well individually, whereas an increasingly lower ratio indicates a larger interindividual performance difference.
 
+#INDIVIDUAL and COLLECTIVE analysis
+
 ```{r}
 #correlating interindivual RT skill ratios with collective benefit for each of the contribution conditions, separately for Approach and Homing-in
 
@@ -1010,8 +1012,294 @@ collective_benefit_DIST %>%
         strip.text = element_text(face = "bold"))
 ```
 ```{r}
+#2x3 Repeated measures ANOVA: phase x contribution angle
+#at contribution angles
+#separately for RT and DIST
 
+library(ez)
+library(effectsize)
+
+#RT
+
+anova_data_RT <- collective_benefit_RT %>%
+  filter(contribution_angle %in% c(22.5, 45, 67.5)) %>%
+  mutate(
+    phase               = factor(phase),
+    contribution_angle  = factor(contribution_angle)
+  )
+
+#check for missing cells
+anova_data_RT %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  print()
+
+#ANOVA
+anova_RT <- ezANOVA(
+  data       = anova_data_RT,
+  dv         = collective_benefit,
+  wid        = dyad_id,
+  within     = .(phase, contribution_angle),
+  type       = 3,
+  detailed   = TRUE,
+  return_aov = TRUE
+)
+print(anova_RT)
+
+#effect sizes (partial eta squared is given by ezANOVA,
+# but also compute Cohen's f for completeness)
+effectsize::eta_squared(anova_RT$aov, partial = TRUE)
+
+#post-hoc pairwise comparisons if contribution_angle is significant
+#collapsed across phase
+pairwise_RT_data <- anova_data_RT %>%
+  group_by(dyad_id, contribution_angle) %>%
+  summarise(mean_benefit = mean(collective_benefit, na.rm = TRUE), .groups = "drop")
+
+pairwise_RT <- pairwise.t.test(
+  x               = pairwise_RT_data$mean_benefit,
+  g               = pairwise_RT_data$contribution_angle,
+  paired          = TRUE,
+  p.adjust.method = "bonferroni"
+)
+print(pairwise_RT)
+
+#DIST
+
+anova_data_DIST <- collective_benefit_DIST %>%
+  filter(contribution_angle %in% c(22.5, 45, 67.5)) %>%
+  mutate(
+    phase              = factor(phase),
+    contribution_angle = factor(contribution_angle)
+  )
+
+#check for missing cells
+anova_data_DIST %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  print()
+
+#run ANOVA
+anova_DIST <- ezANOVA(
+  data       = anova_data_DIST,
+  dv         = collective_benefit,
+  wid        = dyad_id,
+  within     = .(phase, contribution_angle),
+  type       = 3,
+  detailed   = TRUE,
+  return_aov = TRUE
+)
+print(anova_DIST)
+
+#effect sizes
+effectsize::eta_squared(anova_DIST$aov, partial = TRUE)
+
+#post-hoc pairwise comparisons
+pairwise_DIST_data <- anova_data_DIST %>%
+  group_by(dyad_id, contribution_angle) %>%
+  summarise(mean_benefit = mean(collective_benefit, na.rm = TRUE), .groups = "drop")
+
+pairwise_DIST <- pairwise.t.test(
+  x               = pairwise_DIST_data$mean_benefit,
+  g               = pairwise_DIST_data$contribution_angle,
+  paired          = TRUE,
+  p.adjust.method = "bonferroni"
+)
+print(pairwise_DIST)
+
+#plot
+
+plot_anova <- function(data, title_label, y_label) {
+  data %>%
+    mutate(contribution_angle = factor(paste0(contribution_angle, "°"),
+                                       levels = c("22.5°", "45°", "67.5°"))) %>%
+    ggplot(aes(x = contribution_angle, y = collective_benefit, colour = phase)) +
+    geom_point(alpha = 0.6, size = 2.5) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.8) +
+    stat_summary(fun = mean, geom = "point", size = 4, shape = 18) +
+    stat_summary(fun = mean, geom = "line", aes(group = 1), linewidth = 0.8) +
+    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+    facet_wrap(~ phase) +
+    scale_colour_manual(values = c("Approach"  = "#4C9BE8",
+                                   "Homing-in" = "#E8834C")) +
+    labs(
+      title    = title_label,
+      subtitle = "22.5°, 45°, 67.5° only  |  Dashed line = no benefit",
+      x        = "Contribution angle",
+      y        = y_label
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(legend.position = "none",
+          strip.text = element_text(face = "bold"))
+}
+
+plot_anova(anova_data_RT,
+           "Collective benefit (RT) by Phase x Contribution Angle",
+           "Collective benefit (best individual RT / cooperative RT)")
+
+plot_anova(anova_data_DIST,
+           "Collective benefit (DIST) by Phase x Contribution Angle",
+           "Collective benefit (best individual DIST / cooperative DIST)")
 ```
+```{r}
+#Steiger test for comparing correlations between angles both DIST and RT
+library(cocor)
+
+run_steiger <- function(corr_data, correlation_results, measure_label) {
+  
+  angles <- c(22.5, 45, 67.5)
+  phases <- c("Approach", "Homing-in")
+  
+  # all pairs where 67.5° is compared to the other two
+  comparisons <- list(
+    c(67.5, 22.5),
+    c(67.5, 45)
+  )
+  
+  for (phase_label in phases) {
+    
+    d <- corr_data %>% filter(phase == phase_label)
+    
+    r_vals <- correlation_results %>%
+      filter(phase == phase_label) %>%
+      select(contribution_angle, r) %>%
+      deframe()
+    
+    n <- d %>%
+      filter(contribution_angle == angles[1]) %>%
+      summarise(n = sum(!is.na(skill_ratio) & !is.na(collective_benefit))) %>%
+      pull(n)
+    
+    get_r <- function(a1, a2) {
+      x <- d %>% filter(contribution_angle == a1) %>% pull(collective_benefit)
+      y <- d %>% filter(contribution_angle == a2) %>% pull(collective_benefit)
+      cor(x, y, use = "complete.obs")
+    }
+    
+    for (pair in comparisons) {
+      a1 <- pair[1]; a2 <- pair[2]
+      cat("\n======", measure_label, "|", phase_label, ":", a1, "° vs", a2, "° ======\n")
+      print(cocor.dep.groups.overlap(
+        r.jk = r_vals[as.character(a1)],
+        r.jh = r_vals[as.character(a2)],
+        r.kh = get_r(a1, a2),
+        n    = n
+      ))
+    }
+  }
+}
+
+#RT
+run_steiger(corr_data, correlation_results, "RT")
+
+#DIST
+run_steiger(corr_data2, correlation_results2, "DIST")
+```
+```{r}
+#Making plots for indicidual differences as predictor for RT
+#recode contribution angles to match paper's % labels
+corr_data_plot <- corr_data %>%
+  mutate(
+    angle_label = case_when(
+      contribution_angle == 22.5 ~ "30%",
+      contribution_angle == 45   ~ "50%",
+      contribution_angle == 67.5 ~ "70%"
+    ),
+    angle_label = factor(angle_label, levels = c("30%", "50%", "70%"))
+  ) %>%
+  filter(!is.na(angle_label))  # <-- drops the NA group
+
+plot_fig4 <- function(data, phase_label, panel_label) {
+  data %>%
+    filter(phase == phase_label) %>%
+    ggplot(aes(x = skill_ratio, y = collective_benefit,
+               colour = angle_label, fill = angle_label)) +
+    geom_point(size = 2.5, alpha = 0.8) +
+    geom_smooth(method = "lm", se = TRUE, linewidth = 1.2, alpha = 0.15,
+                aes(group = angle_label)) +
+    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+    scale_colour_manual(
+      name   = "Action contribution\nof better member",
+      values = c("30%" = "#4C9BE8", "50%" = "#E8834C", "70%" = "#6DBE6D")
+    ) +
+    scale_fill_manual(
+      name   = "Action contribution\nof better member",
+      values = c("30%" = "#4C9BE8", "50%" = "#E8834C", "70%" = "#6DBE6D")
+    ) +
+    labs(
+      title = panel_label,
+      x     = "RT min / RT max",
+      y     = "Collective Benefit\nRT min / RT dyad"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      legend.position  = "bottom",
+      legend.title     = element_text(size = 10),
+      plot.title       = element_text(face = "bold", size = 13),
+      panel.grid.minor = element_blank()
+    )
+}
+
+p_approach <- plot_fig4(corr_data_plot, "Approach",  "A")
+p_homingin <- plot_fig4(corr_data_plot, "Homing-in", "B")
+
+p_approach + p_homingin +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+```{r}
+#Making plots for indicidual differences as predictor for DIST
+corr_data2_plot <- corr_data2 %>%
+  mutate(
+    angle_label = case_when(
+      contribution_angle == 22.5 ~ "30%",
+      contribution_angle == 45   ~ "50%",
+      contribution_angle == 67.5 ~ "70%"
+    ),
+    angle_label = factor(angle_label, levels = c("30%", "50%", "70%"))
+  ) %>%
+  filter(!is.na(angle_label))
+
+plot_fig4_DIST <- function(data, phase_label, panel_label) {
+  data %>%
+    filter(phase == phase_label) %>%
+    ggplot(aes(x = skill_ratio, y = collective_benefit,
+               colour = angle_label, fill = angle_label)) +
+    geom_point(size = 2.5, alpha = 0.8) +
+    geom_smooth(method = "lm", se = TRUE, linewidth = 1.2, alpha = 0.15,
+                aes(group = angle_label)) +
+    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+    scale_colour_manual(
+      name   = "Action contribution\nof better member",
+      values = c("30%" = "#4C9BE8", "50%" = "#E8834C", "70%" = "#6DBE6D")
+    ) +
+    scale_fill_manual(
+      name   = "Action contribution\nof better member",
+      values = c("30%" = "#4C9BE8", "50%" = "#E8834C", "70%" = "#6DBE6D")
+    ) +
+    labs(
+      title = panel_label,
+      x     = "DIST min / DIST max",
+      y     = "Collective Benefit\nDIST min / DIST dyad"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      legend.position  = "bottom",
+      legend.title     = element_text(size = 10),
+      plot.title       = element_text(face = "bold", size = 13),
+      panel.grid.minor = element_blank()
+    )
+}
+
+p_approach_DIST <- plot_fig4_DIST(corr_data2_plot, "Approach",  "A")
+p_homingin_DIST <- plot_fig4_DIST(corr_data2_plot, "Homing-in", "B")
+
+p_approach_DIST + p_homingin_DIST +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+#AI and PLAYBACK analysis
+
 ```{r}
 
 ```
