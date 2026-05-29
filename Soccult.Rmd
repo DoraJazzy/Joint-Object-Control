@@ -1835,3 +1835,308 @@ ggplot(cb_all_dyad_RT,
 Now all three conditions are at dyad level with the same n = 6, so the paired t-tests are valid — each dyad contributes one observation per condition. Flag in the write-up that the cooperative collective benefit uses the better of the two members as the individual baseline, while AI and playback average across both members, which is a slight asymmetry.
 
 We use the best individual performance of the two dyad members as the baseline for all three conditions, we accept the small asymmetry in the write-up, and note that a human-contribution-only reconstruction would require frame-level simulation beyond the scope of the current analysis.
+
+```{r}
+#doing the same for DIST 
+#for AI and playback: average the two dyad members per dyad as baseline
+#for cooperative: best dyad member is used as baseline
+cb_ai_dyad_DIST <- analysis_data %>%
+  filter(condition == "ai") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  rename(dyad_id = dyad_id.y) %>%
+  filter(!is.na(dyad_id)) %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(part_DIST = mean(DIST, na.rm = TRUE), .groups = "drop") %>%
+  left_join(best_individual_DIST, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  mutate(collective_benefit = best_individual_DIST / part_DIST,
+         partner_type = "adaptive_ai")
+
+cb_pb_dyad_DIST <- analysis_data %>%
+  filter(condition == "playback") %>%
+  left_join(participant_dyad_map, by = "participant_id") %>%
+  rename(dyad_id = dyad_id.y) %>%
+  filter(!is.na(dyad_id)) %>%
+  group_by(dyad_id, phase, contribution_angle) %>%
+  summarise(part_DIST = mean(DIST, na.rm = TRUE), .groups = "drop") %>%
+  left_join(best_individual_DIST, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  mutate(collective_benefit = best_individual_DIST / part_DIST,
+         partner_type = "nonadaptive_playback")
+
+cb_coop_dyad_DIST <- collective_benefit_DIST %>%
+  mutate(partner_type = "adaptive_human")
+
+#bind all three — now all at dyad level, n = 6 each
+cb_all_dyad_DIST <- bind_rows(
+  cb_coop_dyad_DIST %>% select(dyad_id, phase, contribution_angle, collective_benefit, partner_type),
+  cb_ai_dyad_DIST,
+  cb_pb_dyad_DIST
+) %>%
+  mutate(
+    partner_type = factor(partner_type,
+                          levels = c("adaptive_human", "adaptive_ai", "nonadaptive_playback")),
+    contribution_angle = factor(paste0(contribution_angle, "°"),
+                                levels = c("0°", "22.5°", "45°", "67.5°", "90°"))
+  )
+
+#pairwise comparisons per phase (paired by dyad)
+for (ph in levels(cb_all_dyad_DIST$phase)) {
+  cat("\n── Phase:", ph, "──\n")
+  d <- cb_all_dyad_DIST %>% filter(phase == ph) %>%
+    group_by(dyad_id, partner_type) %>%
+    summarise(mean_cb = mean(collective_benefit, na.rm = TRUE), .groups = "drop")
+  print(pairwise.t.test(
+    x               = d$mean_cb,
+    g               = d$partner_type,
+    paired          = TRUE,
+    p.adjust.method = "bonferroni"
+  ))
+}
+
+#plot
+ggplot(cb_all_dyad_DIST,
+       aes(x = contribution_angle, y = collective_benefit, colour = partner_type)) +
+  geom_jitter(alpha = 0.5, size = 2,
+              position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.5)) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18,
+               position = position_dodge(0.5)) +
+  stat_summary(fun = mean, geom = "line", aes(group = partner_type),
+               position = position_dodge(0.5), linewidth = 0.8) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2,
+               position = position_dodge(0.5), linewidth = 0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ phase) +
+  scale_colour_manual(
+    values = c("adaptive_human"       = "#E8834C",
+               "adaptive_ai"          = "#9B59B6",
+               "nonadaptive_playback" = "#27AE60"),
+    labels = c("Adaptive Human", "Adaptive AI", "Non-adaptive Playback")
+  ) +
+  labs(
+    title    = "Collective benefit (DIST) by partner type",
+    subtitle = "Dyad-level comparison, n = 6  |  Dashed line = no benefit over individual",
+    x = "Contribution angle", y = "Collective benefit (individual / condition DIST)",
+    colour = "Partner type"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+```{r}
+#Axis-control analysis RT
+#join frame_clean axis_control variable to summary trial data
+
+axis_trial <- frame_clean %>%
+  mutate(mode = tolower(mode)) %>%
+  filter(mode %in% c("ai", "playback")) %>%
+  group_by(participant_id, mode, iteration, phase) %>%
+  summarise(axis_control = first(na.omit(axis_control)), .groups = "drop") %>%
+  mutate(phase = str_replace_all(tolower(phase), "[^a-z0-9]+", "_"))   
+
+# analysis_data side: identical normalization before the join
+analysis_axis <- analysis_data %>%
+  filter(condition %in% c("ai", "playback")) %>%
+  mutate(
+    condition = as.character(condition),
+    phase     = str_replace_all(tolower(as.character(phase)), "[^a-z0-9]+", "_")  
+  ) %>%
+  left_join(axis_trial %>% rename(condition = mode),
+            by = c("participant_id", "condition", "iteration", "phase")) %>%
+  filter(!is.na(axis_control)) %>%
+  mutate(
+    partner_axis = case_when(
+      str_detect(axis_control, regex("horiz", ignore_case = TRUE)) ~ "horizontal",
+      str_detect(axis_control, regex("vert",  ignore_case = TRUE)) ~ "vertical",
+      TRUE ~ NA_character_
+    ),
+    partner_axis = factor(partner_axis, levels = c("horizontal", "vertical"))
+  ) %>%
+  filter(!is.na(partner_axis))
+
+#participant-level means by condition × phase × axis
+axis_means_RT <- analysis_axis %>%
+  group_by(participant_id, condition, phase, partner_axis) %>%
+  summarise(mean_RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+#paired t-test + Cohen's d: horizontal vs vertical within each condition × phase
+axis_tests_RT <- axis_means_RT %>%
+  pivot_wider(names_from = partner_axis, values_from = mean_RT) %>%
+  group_by(condition, phase) %>%
+  summarise(
+    n         = sum(!is.na(horizontal) & !is.na(vertical)),
+    M_horiz   = mean(horizontal, na.rm = TRUE),
+    M_vert    = mean(vertical,   na.rm = TRUE),
+    mean_diff = mean(vertical - horizontal, na.rm = TRUE),
+    t_stat    = tryCatch(t.test(vertical[!is.na(vertical) & !is.na(horizontal)],
+                                horizontal[!is.na(vertical) & !is.na(horizontal)],
+                                paired = TRUE)$statistic, error = function(e) NA),
+    p_value   = tryCatch(t.test(vertical[!is.na(vertical) & !is.na(horizontal)],
+                                horizontal[!is.na(vertical) & !is.na(horizontal)],
+                                paired = TRUE)$p.value, error = function(e) NA),
+    cohens_d  = tryCatch(
+      mean(vertical - horizontal, na.rm = TRUE) /
+        sd(vertical - horizontal,  na.rm = TRUE),
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+
+cat("── Axis-control tests (RT) ──\n")
+print(axis_tests_RT)
+
+#plot
+axis_means_RT %>%
+  ggplot(aes(x = partner_axis, y = mean_RT, colour = partner_axis)) +
+  geom_jitter(width = 0.1, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.8) +
+  facet_grid(phase ~ condition) +
+  scale_colour_manual(values = c("horizontal" = "#3498DB", "vertical" = "#E74C3C")) +
+  labs(
+    title  = "RT by Axis Control (Horizontal vs Vertical)",
+    x = "Partner axis", y = "Mean RT (s)", colour = "Axis"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+
+```{r axis-control-DIST}
+#Axis-control analysis DIST
+#participant-level means by condition × phase × axis
+axis_means_DIST <- analysis_axis %>%
+  group_by(participant_id, condition, phase, partner_axis) %>%
+  summarise(mean_DIST = mean(DIST, na.rm = TRUE), .groups = "drop")
+
+#paired t-test + Cohen's d: horizontal vs vertical within each condition × phase
+axis_tests_DIST <- axis_means_DIST %>%
+  pivot_wider(names_from = partner_axis, values_from = mean_DIST) %>%
+  group_by(condition, phase) %>%
+  summarise(
+    n          = sum(!is.na(horizontal) & !is.na(vertical)),
+    M_horiz    = mean(horizontal, na.rm = TRUE),
+    M_vert     = mean(vertical,   na.rm = TRUE),
+    mean_diff  = mean(vertical - horizontal, na.rm = TRUE),
+    t_stat     = tryCatch(t.test(vertical[!is.na(vertical) & !is.na(horizontal)],
+                                 horizontal[!is.na(vertical) & !is.na(horizontal)],
+                                 paired = TRUE)$statistic, error = function(e) NA),
+    p_value    = tryCatch(t.test(vertical[!is.na(vertical) & !is.na(horizontal)],
+                                 horizontal[!is.na(vertical) & !is.na(horizontal)],
+                                 paired = TRUE)$p.value,   error = function(e) NA),
+    cohens_d   = tryCatch(
+      mean(vertical - horizontal, na.rm = TRUE) /
+        sd(vertical - horizontal, na.rm = TRUE),
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sig = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      p_value < .10  ~ "†",
+      TRUE           ~ ""
+    )
+  )
+
+cat("── Axis-control tests (DIST) ──\n")
+print(axis_tests_DIST)
+
+#plot
+axis_means_DIST %>%
+  ggplot(aes(x = partner_axis, y = mean_DIST, colour = partner_axis)) +
+  geom_jitter(width = 0.1, alpha = 0.5, size = 2) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, linewidth = 0.8) +
+  facet_grid(phase ~ condition, labeller = labeller(phase = str_to_title)) +   # restore phase capitalization in labels
+  scale_colour_manual(values = c("horizontal" = "#3498DB", "vertical" = "#E74C3C")) +
+  labs(
+    title  = "DIST by Axis Control (Horizontal vs Vertical)",
+    x = "Partner axis", y = "Mean DIST (px)", colour = "Axis"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
+
+---
+
+## 6. Error-rate analysis THIS I NOT WORKING YET
+
+Error rates were recorded in `trial_data$error_trial`. We analyse:
+(a) overall error rate per condition × phase and
+(b) a logistic mixed-effects model predicting error probability from condition
+and phase (with participant as random intercept), if any errors exist.
+
+```{r error-rate-analysis}
+# ── Summary table ─────────────────────────────────────────────────────────────
+error_summary <- trial_data %>%
+  group_by(condition, phase) %>%
+  summarise(
+    n_trials     = n(),
+    n_errors     = sum(error_trial, na.rm = TRUE),
+    error_rate   = mean(error_trial, na.rm = TRUE),
+    SE_rate      = sqrt(error_rate * (1 - error_rate) / n_trials),
+    .groups = "drop"
+  )
+
+cat("── Error rate summary ──\n")
+print(error_summary)
+
+# ── Check whether any errors exist ────────────────────────────────────────────
+total_errors <- sum(trial_data$error_trial, na.rm = TRUE)
+cat("\nTotal error trials:", total_errors, "\n")
+
+if (total_errors > 0) {
+  
+  library(lme4)
+  library(lmerTest)
+  
+  # ── Logistic mixed-effects model ───────────────────────────────────────────
+  error_model <- glmer(
+    error_trial ~ condition * phase + (1 | participant_id),
+    data   = trial_data,
+    family = binomial(link = "logit"),
+    control = glmerControl(optimizer = "bobyqa")
+  )
+  cat("\n── Logistic GLMM (error ~ condition × phase) ──\n")
+  print(summary(error_model))
+  
+  # ── Condition × phase pairwise comparisons ────────────────────────────────
+  emm_error <- emmeans(error_model, ~ condition | phase, type = "response")
+  print(pairs(emm_error, adjust = "bonferroni"))
+  
+} else {
+  cat("No error trials in the dataset — inferential error-rate analysis is not applicable.\n")
+  cat("Reporting descriptively: error rate = 0 across all conditions and phases.\n")
+}
+
+# ── Plot (even if all zeros, shows the zero pattern) ─────────────────────────
+error_summary %>%
+  mutate(condition = factor(condition, levels = c("individual", "cooperative", "ai", "playback"))) %>%
+  ggplot(aes(x = condition, y = error_rate, fill = condition)) +
+  geom_col(width = 0.6, alpha = 0.8) +
+  geom_errorbar(aes(ymin = error_rate - SE_rate, ymax = error_rate + SE_rate),
+                width = 0.2, linewidth = 0.7) +
+  facet_wrap(~ phase) +
+  scale_fill_manual(
+    values = c("individual"  = "#4C9BE8",
+               "cooperative" = "#E8834C",
+               "ai"          = "#9B59B6",
+               "playback"    = "#27AE60"),
+    labels = c("Individual", "Cooperative", "AI", "Playback")
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+  labs(
+    title  = "Error rate by Condition and Phase",
+    x = "Condition", y = "Error rate", fill = "Condition"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+```
