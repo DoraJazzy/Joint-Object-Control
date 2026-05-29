@@ -2070,79 +2070,127 @@ axis_means_DIST %>%
   theme_minimal(base_size = 13) +
   theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
 ```
+#Run learning analysis
 
----
+The approach: for each cooperative trial, collective benefit is computed as the dyad's reaction time on that trial relative to the fixed best-individual baseline for the relevant contribution angle. Trial order within each dyad and phase is then entered as a continuous predictor in a linear mixed model with a random intercept and slope per dyad, so a positive trial slope indicates that collective benefit grows with practice (i.e. learning). Because there are only a handful of cooperative trials per contribution angle, trials are pooled across angle (the angle-specific baseline keeps the measure comparable) and binned only for the plot.inear mixed model with block as the learning predictor and a random effect per dyad.
 
-## 6. Error-rate analysis THIS Is NOT WORKING YET
+The question behind it: do dyads get better at working together the more they practise? --> "better together" here menas that their joint performance beats what the stronger of the two could do alone (the collective benefit). 
 
-Error rates were recorded in `trial_data$error_trial`. We analyse:
-(a) overall error rate per condition × phase and
-(b) a logistic mixed-effects model predicting error probability from condition
-and phase (with participant as random intercept), if any errors exist.
+Interpretation for the plots: we divide the cooperative RT/DIST by the better member's RT/DIST --> above 1: the pair did better than the better individual, below 1: the pair did worse than the better individual. Plots: dashed line at 1 means no benefit, it chops the trials into 4 chunks from early to late trials.
 
-```{r error-rate-analysis}
-# ── Summary table ─────────────────────────────────────────────────────────────
-error_summary <- trial_data %>%
-  group_by(condition, phase) %>%
-  summarise(
-    n_trials     = n(),
-    n_errors     = sum(error_trial, na.rm = TRUE),
-    error_rate   = mean(error_trial, na.rm = TRUE),
-    SE_rate      = sqrt(error_rate * (1 - error_rate) / n_trials),
-    .groups = "drop"
+```{r}
+#Run learning analysis
+#does collective benefit (RT) grow over cooperative trials?
+
+library(lme4)
+library(lmerTest)   
+
+#Per-trial collective benefit for the cooperative condition 
+#numerator   = fixed best-individual baseline
+#denominator = the dyad's RT on that single cooperative trial
+coop_trials_RT <- analysis_data %>%
+  filter(condition == "cooperative") %>%
+  left_join(best_individual_RT, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  filter(!is.na(best_individual_RT), !is.na(RT), RT > 0) %>%
+  mutate(cb_trial = best_individual_RT / RT)
+
+#re-index trials chronologically within each dyad x phase, then center & scale
+coop_trials_RT <- coop_trials_RT %>%
+  group_by(dyad_id, phase) %>%
+  arrange(iteration, .by_group = TRUE) %>%
+  mutate(trial_order = row_number()) %>%
+  ungroup() %>%
+  mutate(
+    trial_z = as.numeric(scale(trial_order)),   # stabilises the random slope
+    phase   = factor(phase)
   )
 
-cat("── Error rate summary ──\n")
-print(error_summary)
+#Learning model: trial order predicting collective benefit ------------------
+#continuous trial predictor, random intercept + slope per dyad
+m_learn <- lmer(cb_trial ~ trial_z * phase + (trial_z | dyad_id), data = coop_trials_RT)
+summary(m_learn)
 
-# ── Check whether any errors exist ────────────────────────────────────────────
-total_errors <- sum(trial_data$error_trial, na.rm = TRUE)
-cat("\nTotal error trials:", total_errors, "\n")
 
-if (total_errors > 0) {
-  
-  library(lme4)
-  library(lmerTest)
-  
-  # ── Logistic mixed-effects model ───────────────────────────────────────────
-  error_model <- glmer(
-    error_trial ~ condition * phase + (1 | participant_id),
-    data   = trial_data,
-    family = binomial(link = "logit"),
-    control = glmerControl(optimizer = "bobyqa")
-  )
-  cat("\n── Logistic GLMM (error ~ condition × phase) ──\n")
-  print(summary(error_model))
-  
-  # ── Condition × phase pairwise comparisons ────────────────────────────────
-  emm_error <- emmeans(error_model, ~ condition | phase, type = "response")
-  print(pairs(emm_error, adjust = "bonferroni"))
-  
-} else {
-  cat("No error trials in the dataset — inferential error-rate analysis is not applicable.\n")
-  cat("Reporting descriptively: error rate = 0 across all conditions and phases.\n")
-}
+#plot: block means across the experiment, per phase
+n_blocks <- 4   # blocks are for the PLOT only; the model above uses raw trial order
 
-# ── Plot (even if all zeros, shows the zero pattern) ─────────────────────────
-error_summary %>%
-  mutate(condition = factor(condition, levels = c("individual", "cooperative", "ai", "playback"))) %>%
-  ggplot(aes(x = condition, y = error_rate, fill = condition)) +
-  geom_col(width = 0.6, alpha = 0.8) +
-  geom_errorbar(aes(ymin = error_rate - SE_rate, ymax = error_rate + SE_rate),
-                width = 0.2, linewidth = 0.7) +
-  facet_wrap(~ phase) +
-  scale_fill_manual(
-    values = c("individual"  = "#4C9BE8",
-               "cooperative" = "#E8834C",
-               "ai"          = "#9B59B6",
-               "playback"    = "#27AE60"),
-    labels = c("Individual", "Cooperative", "AI", "Playback")
-  ) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+cb_blocks_RT <- coop_trials_RT %>%
+  group_by(dyad_id, phase) %>%
+  mutate(block = ntile(trial_order, n_blocks)) %>%
+  group_by(dyad_id, phase, block) %>%
+  summarise(collective_benefit = mean(cb_trial, na.rm = TRUE), .groups = "drop")
+
+ggplot(cb_blocks_RT, aes(block, collective_benefit, colour = phase, fill = phase)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 2.5) +
+  stat_summary(fun.data = mean_se, geom = "ribbon", alpha = 0.15, colour = NA) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+  scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  scale_fill_manual(values   = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  scale_x_continuous(breaks = 1:n_blocks) +
   labs(
-    title  = "Error rate by Condition and Phase",
-    x = "Condition", y = "Error rate", fill = "Condition"
+    title  = "Learning: collective benefit (RT) across cooperative trials",
+    x      = paste0("Trial block (1\u2013", n_blocks, ")"),
+    y      = "Collective benefit (RT min / RT dyad)",
+    colour = "Phase", fill = "Phase"
   ) +
   theme_minimal(base_size = 13) +
-  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
+  theme(legend.position = "bottom")
+```
+```{r}
+# Run learning analysis: does collective benefit (DIST) grow over cooperative trials?
+
+library(lme4)
+library(lmerTest)   
+
+#per-trial collective benefit (DIST) for the cooperative condition 
+#numerator   = fixed best-individual DIST baseline (angle-specific)
+#denominator = the dyad's DIST on that single cooperative trial
+coop_trials_DIST <- analysis_data %>%
+  filter(condition == "cooperative") %>%
+  left_join(best_individual_DIST, by = c("dyad_id", "phase", "contribution_angle")) %>%
+  filter(!is.na(best_individual_DIST), !is.na(DIST), DIST > 0) %>%
+  mutate(cb_trial = best_individual_DIST / DIST)
+
+#re-index trials chronologically within each dyad x phase, then center & scale
+coop_trials_DIST <- coop_trials_DIST %>%
+  group_by(dyad_id, phase) %>%
+  arrange(iteration, .by_group = TRUE) %>%
+  mutate(trial_order = row_number()) %>%
+  ungroup() %>%
+  mutate(
+    trial_z = as.numeric(scale(trial_order)),   # stabilises the random slope
+    phase   = factor(phase)
+  )
+
+#Learning model: trial order predicting collective benefit (DIST)
+m_learn_DIST <- lmer(cb_trial ~ trial_z * phase + (trial_z | dyad_id), data = coop_trials_DIST)
+summary(m_learn_DIST)
+
+#Plot: block means across the experiment, per phase
+
+n_blocks <- 4   # blocks are for the PLOT only; the model above uses raw trial order
+
+cb_blocks_DIST <- coop_trials_DIST %>%
+  group_by(dyad_id, phase) %>%
+  mutate(block = ntile(trial_order, n_blocks)) %>%
+  group_by(dyad_id, phase, block) %>%
+  summarise(collective_benefit = mean(cb_trial, na.rm = TRUE), .groups = "drop")
+
+ggplot(cb_blocks_DIST, aes(block, collective_benefit, colour = phase, fill = phase)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 2.5) +
+  stat_summary(fun.data = mean_se, geom = "ribbon", alpha = 0.15, colour = NA) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+  scale_colour_manual(values = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  scale_fill_manual(values   = c("Approach" = "#4C9BE8", "Homing-in" = "#E8834C")) +
+  scale_x_continuous(breaks = 1:n_blocks) +
+  labs(
+    title  = "Learning: collective benefit (DIST) across cooperative trials",
+    x      = paste0("Trial block (1\u2013", n_blocks, ")"),
+    y      = "Collective benefit (DIST min / DIST dyad)",
+    colour = "Phase", fill = "Phase"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
 ```
